@@ -7,7 +7,8 @@ import (
 )
 
 type Serve struct {
-	Name      string
+	Name string
+	//tcp4 or other
 	IPVersion string
 	IP        string
 	Port      int
@@ -44,6 +45,7 @@ func (s *Serve) Start() {
 						fmt.Println("Receive error:", err.Error())
 						continue
 					}
+					fmt.Printf("receive success:%s, cnt=%d\n", buf, cnt)
 					if _, err := conn.Write(buf[:cnt]); err != nil { //我们不关心写的长度
 						fmt.Println("Write back error:", err.Error())
 						continue
@@ -54,6 +56,7 @@ func (s *Serve) Start() {
 	}()
 }
 func (s *Serve) Stop() {
+	fmt.Println("[STOP] Zinx server , name ", s.Name)
 	//TODO 释放或回收资源、连接等
 }
 func (s *Serve) Serve() {
