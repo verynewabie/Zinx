@@ -2,6 +2,7 @@ package znet
 
 import (
 	"Zinx/ziface"
+	"errors"
 	"fmt"
 	"net"
 )
@@ -12,6 +13,17 @@ type Serve struct {
 	IPVersion string
 	IP        string
 	Port      int
+}
+
+// CallBackToClient 定义当前客户端链接的handle api
+func CallBackToClient(conn *net.TCPConn, data []byte, cnt int) error {
+	//回显业务
+	fmt.Println("[Conn Handle] CallBackToClient ... ")
+	if _, err := conn.Write(data[:cnt]); err != nil {
+		fmt.Println("write back buf err ", err)
+		return errors.New("CallBackToClient error")
+	}
+	return nil
 }
 
 func (s *Serve) Start() {
@@ -31,37 +43,33 @@ func (s *Serve) Start() {
 		}
 		fmt.Println("start zinx server", s.Name, "success, listening...")
 		//3.阻塞等待客户端连接，处理业务
+		var connectionID uint32 = 0
 		for {
+			//3.1 阻塞等待客户端建立连接请求
 			conn, err := listener.AcceptTCP()
 			if err != nil {
-				fmt.Println("Accept error:", err.Error())
+				fmt.Println("Accept err ", err)
 				continue
 			}
-			go func() {
-				for {
-					buf := make([]byte, 512)
-					cnt, err := conn.Read(buf) // cnt代表读取的长度
-					if err != nil {
-						fmt.Println("Receive error:", err.Error())
-						continue
-					}
-					fmt.Printf("receive success:%s, cnt=%d\n", buf, cnt)
-					if _, err := conn.Write(buf[:cnt]); err != nil { //我们不关心写的长度
-						fmt.Println("Write back error:", err.Error())
-						continue
-					}
-				}
-			}()
+
+			//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
+
+			//3.3 处理该新连接请求的 业务 方法， 此时应该有 handler 和 conn是绑定的
+			dealConn := NewConnection(conn, connectionID, CallBackToClient)
+			connectionID++
+
+			//3.4 启动当前链接的处理业务
+			go dealConn.Start()
 		}
 	}()
 }
 func (s *Serve) Stop() {
 	fmt.Println("[STOP] Zinx server , name ", s.Name)
-	//TODO 释放或回收资源、连接等
+	// TODO 释放或回收资源、连接等
 }
 func (s *Serve) Serve() {
 	s.Start()
-	//TODO 服务器启动后的一些额外业务
+	// TODO 服务器启动后的一些额外业务
 	//这里要阻塞，不然客户端一调用Serve函数就结束了
 	select {}
 }
