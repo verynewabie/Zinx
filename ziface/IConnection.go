@@ -12,6 +12,3 @@ type IConnection interface {
 	// GetTCPConnection 获取原生连接
 	GetTCPConnection() *net.TCPConn
 }
-
-// HandFunc 定义统一处理连接的接口 三个参数：socket原生链接 客户端请求数据 数据长度
-type HandFunc func(*net.TCPConn, []byte, int) error
