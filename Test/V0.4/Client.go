@@ -1,13 +1,12 @@
-package znet
+package main
 
 import (
 	"fmt"
 	"net"
-	"testing"
 	"time"
 )
 
-func ClientTest() {
+func main() {
 
 	fmt.Println("Client Test ... start")
 	//3秒之后发起测试请求，给服务端开启服务的机会
@@ -18,8 +17,9 @@ func ClientTest() {
 		fmt.Println("client start err, exit!")
 		return
 	}
+
 	for {
-		_, err := conn.Write([]byte("hello ZINX"))
+		_, err := conn.Write([]byte("Hello ZinxV0.2"))
 		if err != nil {
 			fmt.Println("write error err ", err)
 			return
@@ -32,26 +32,8 @@ func ClientTest() {
 			return
 		}
 
-		fmt.Printf(" server call back : %s, cnt = %d\n", buf, cnt)
+		fmt.Printf("server call back : %s, cnt = %d\n", buf, cnt)
 
 		time.Sleep(1 * time.Second)
 	}
-}
-
-// Server 模块的测试函数
-func TestServer(t *testing.T) {
-
-	/*
-		服务端测试
-	*/
-	//1 创建一个server 句柄 s
-	s := NewServer()
-
-	/*
-		客户端测试
-	*/
-	go ClientTest()
-
-	//2 开启服务
-	s.Serve()
 }

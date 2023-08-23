@@ -1,6 +1,7 @@
 package znet
 
 import (
+	"Zinx/utils"
 	"Zinx/ziface"
 	"fmt"
 	"net"
@@ -18,10 +19,15 @@ type Server struct {
 func (s *Server) AddRouter(router ziface.IRouter) {
 	s.Router = router
 
-	fmt.Println("Add Router succ! ")
+	fmt.Println("Add Router success! ")
 }
 
 func (s *Server) Start() {
+	fmt.Printf("[START] Server name: %s,listenner at IP: %s, Port %d is starting\n", s.Name, s.IP, s.Port)
+	fmt.Printf("[Zinx] Version: %s, MaxConn: %d,  MaxPacketSize: %d\n",
+		utils.GlobalObject.Version,
+		utils.GlobalObject.MaxConn,
+		utils.GlobalObject.MaxPacketSize)
 	fmt.Println("[Start] Server listener at IP:", s.IP, "Port:", s.Port)
 	go func() {
 		//1.获取Tcp的address
@@ -68,13 +74,14 @@ func (s *Server) Serve() {
 	//这里要阻塞，不然客户端一调用Serve函数就结束了
 	select {}
 }
-func NewServer(name string) ziface.IServer {
+func NewServer() ziface.IServer {
 	// s 使用tcp/ip版本4
+	//utils.GlobalObject.Reload()
 	s := &Server{
-		Name:      name,
+		Name:      utils.GlobalObject.Name, //从全局参数获取
 		IPVersion: "tcp4",
-		IP:        "0.0.0.0",
-		Port:      8999,
+		IP:        utils.GlobalObject.Host,    //从全局参数获取
+		Port:      utils.GlobalObject.TcpPort, //从全局参数获取
 		Router:    nil,
 	}
 	return s
