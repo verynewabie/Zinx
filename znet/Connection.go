@@ -2,7 +2,9 @@ package znet
 
 import (
 	"Zinx/ziface"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 )
 
@@ -34,17 +36,37 @@ func (conn *Connection) StartReader() {
 	defer conn.Stop()
 
 	for {
-		//读取我们的数据到buf中
-		buf := make([]byte, 512)
-		_, err := conn.Conn.Read(buf)
-		if err != nil {
-			fmt.Println("receive buf error ", err)
+		// 创建拆包解包的对象
+		dp := NewDataPack()
+		//读取客户端的Msg head
+		headData := make([]byte, dp.GetHeadLen())
+		if _, err := io.ReadFull(conn.GetTCPConnection(), headData); err != nil {
+			fmt.Println("read msg head error ", err)
 			conn.ExitBuffChan <- true
 			continue
 		}
+		//拆包，得到msgId 和 dataLen 放在msg中
+		msg, err := dp.Unpack(headData)
+		if err != nil {
+			fmt.Println("unpack error ", err)
+			conn.ExitBuffChan <- true
+			continue
+		}
+		//根据 dataLen 读取 data，放在msg.Data中
+		var data []byte
+		if msg.GetDataLen() > 0 {
+			data = make([]byte, msg.GetDataLen())
+			if _, err := io.ReadFull(conn.GetTCPConnection(), data); err != nil {
+				fmt.Println("read msg data error ", err)
+				conn.ExitBuffChan <- true
+				continue
+			}
+		}
+		msg.SetData(data)
+		//得到当前客户端请求的Request数据
 		request := Request{
 			conn: conn,
-			data: buf,
+			msg:  msg, //将之前的buf 改成 msg
 		}
 		//调用当前链接业务
 		go func(request ziface.IRequest) {
@@ -99,4 +121,27 @@ func (conn *Connection) GetConnID() uint32 {
 // RemoteAddr 获取远程客户端地址信息
 func (conn *Connection) RemoteAddr() net.Addr {
 	return conn.Conn.RemoteAddr()
+}
+
+// SendMsg 直接将Message数据发送数据给远程的TCP客户端
+func (conn *Connection) SendMsg(msgId uint32, data []byte) error {
+	if conn.isClosed == true {
+		return errors.New("connection closed when send msg")
+	}
+	//将data封包，并且发送
+	dp := NewDataPack()
+	msg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("Pack error msg id = ", msgId)
+		return errors.New("pack error msg ")
+	}
+
+	//写回客户端
+	if _, err := conn.Conn.Write(msg); err != nil {
+		fmt.Println("Write msg id ", msgId, " error ")
+		conn.ExitBuffChan <- true
+		return errors.New("conn Write error")
+	}
+
+	return nil
 }
