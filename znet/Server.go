@@ -10,16 +10,15 @@ import (
 type Server struct {
 	Name string
 	//tcp4 or other
-	IPVersion string
-	IP        string
-	Port      int
-	Router    ziface.IRouter
+	IPVersion  string
+	IP         string
+	Port       int
+	msgHandler ziface.IMsgHandler
 }
 
-func (s *Server) AddRouter(router ziface.IRouter) {
-	s.Router = router
-
-	fmt.Println("Add Router success! ")
+func (s *Server) AddRouter(msgId uint32, router ziface.IRouter) {
+	s.msgHandler.AddRouter(msgId, router)
+	fmt.Println("Add router success! msgId = ", msgId)
 }
 
 func (s *Server) Start() {
@@ -56,7 +55,7 @@ func (s *Server) Start() {
 			//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
 
 			//3.3 处理该新连接请求的业务方法
-			dealConn := NewConnection(conn, connectionID, s.Router)
+			dealConn := NewConnection(conn, connectionID, s.msgHandler)
 			connectionID++
 
 			//3.4 启动当前链接的处理业务
@@ -78,11 +77,11 @@ func NewServer() ziface.IServer {
 	// s 使用tcp/ip版本4
 	//utils.GlobalObject.Reload()
 	s := &Server{
-		Name:      utils.GlobalObject.Name, //从全局参数获取
-		IPVersion: "tcp4",
-		IP:        utils.GlobalObject.Host,    //从全局参数获取
-		Port:      utils.GlobalObject.TcpPort, //从全局参数获取
-		Router:    nil,
+		Name:       utils.GlobalObject.Name, //从全局参数获取
+		IPVersion:  "tcp4",
+		IP:         utils.GlobalObject.Host,    //从全局参数获取
+		Port:       utils.GlobalObject.TcpPort, //从全局参数获取
+		msgHandler: NewMsgHandler(),
 	}
 	return s
 }
