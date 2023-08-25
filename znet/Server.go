@@ -28,7 +28,10 @@ func (s *Server) Start() {
 		utils.GlobalObject.MaxConn,
 		utils.GlobalObject.MaxPacketSize)
 	fmt.Println("[Start] Server listener at IP:", s.IP, "Port:", s.Port)
+	//开启一个go去做服务端Listener业务
 	go func() {
+		//0 启动worker工作池机制
+		s.msgHandler.StartWorkerPool()
 		//1.获取Tcp的address
 		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
 		if err != nil {

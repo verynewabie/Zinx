@@ -1,6 +1,7 @@
 package znet
 
 import (
+	"Zinx/utils"
 	"Zinx/ziface"
 	"errors"
 	"fmt"
@@ -70,8 +71,14 @@ func (conn *Connection) StartReader() {
 			conn: conn,
 			msg:  msg, //将之前的buf 改成 msg
 		}
-		//调用当前链接业务
-		go conn.MsgHandler.DoMsgHandler(&request)
+		//根据用户配置决定是否使用工作池机制
+		if utils.GlobalObject.WorkerPoolSize > 0 {
+			//已经启动工作池机制，将消息交给Worker处理
+			conn.MsgHandler.SendMsgToTaskQueue(&request)
+		} else {
+			//从绑定好的消息和对应的处理方法中执行对应的Handle方法
+			go conn.MsgHandler.DoMsgHandler(&request)
+		}
 	}
 }
 
