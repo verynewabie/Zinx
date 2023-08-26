@@ -10,25 +10,33 @@ import (
 )
 
 type Connection struct {
-	Conn     *net.TCPConn
-	ConnID   uint32
-	isClosed bool
+	//当前Conn属于哪个Server
+	TcpServer ziface.IServer
+	Conn      *net.TCPConn
+	ConnID    uint32
+	isClosed  bool
 	// ExitBuffChan 告知该链接已经退出/停止的channel
 	ExitBuffChan chan bool
 	// MsgHandler 链接的处理方法
 	MsgHandler ziface.IMsgHandler
-	msgChan    chan []byte
+	//无缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgChan chan []byte
+	//有缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgBuffChan chan []byte
 }
 
-func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
+func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
 	connection := &Connection{
+		TcpServer:    server,
 		Conn:         conn,
 		ConnID:       connID,
 		isClosed:     false,
 		MsgHandler:   msgHandler,
 		ExitBuffChan: make(chan bool, 1),
 		msgChan:      make(chan []byte),
+		msgBuffChan:  make(chan []byte, utils.GlobalObject.MaxMsgChanLen),
 	}
+	connection.TcpServer.GetConnMgr().Add(connection)
 	return connection
 }
 
@@ -46,14 +54,14 @@ func (conn *Connection) StartReader() {
 		if _, err := io.ReadFull(conn.GetTCPConnection(), headData); err != nil {
 			fmt.Println("read msg head error ", err)
 			conn.ExitBuffChan <- true
-			continue
+			return
 		}
 		//拆包，得到msgId 和 dataLen 放在msg中
 		msg, err := dp.Unpack(headData)
 		if err != nil {
 			fmt.Println("unpack error ", err)
 			conn.ExitBuffChan <- true
-			continue
+			return
 		}
 		//根据 dataLen 读取 data，放在msg.Data中
 		var data []byte
@@ -62,7 +70,7 @@ func (conn *Connection) StartReader() {
 			if _, err := io.ReadFull(conn.GetTCPConnection(), data); err != nil {
 				fmt.Println("read msg data error ", err)
 				conn.ExitBuffChan <- true
-				continue
+				return
 			}
 		}
 		msg.SetData(data)
@@ -84,8 +92,10 @@ func (conn *Connection) StartReader() {
 
 // Start 启动连接
 func (conn *Connection) Start() {
+	//必须要先开启读写再执行钩子函数，因为钩子函数内可能有网络通信
 	go conn.StartReader()
 	go conn.StartWriter()
+	conn.TcpServer.CallOnConnStart(conn)
 	select {
 	case <-conn.ExitBuffChan:
 		//得到退出消息，不再阻塞
@@ -95,21 +105,25 @@ func (conn *Connection) Start() {
 
 // Stop 终止连接
 func (conn *Connection) Stop() {
+	fmt.Println("Conn Stop()...ConnID = ", conn.ConnID)
 	if conn.isClosed == true {
 		return
 	}
 	conn.isClosed = true
 
-	//TODO Connection Stop() 如果用户注册了该链接的关闭回调业务，那么在此刻应该显示调用
-
+	//如果用户注册了该链接的关闭回调业务，在此刻调用
+	conn.TcpServer.CallOnConnStop(conn)
 	// 关闭socket链接
 	conn.Conn.Close()
 
 	//通知从缓冲队列读数据的业务，该链接已经关闭
 	conn.ExitBuffChan <- true
-
+	//将链接从连接管理器中删除
+	conn.TcpServer.GetConnMgr().Remove(conn)
 	//关闭该链接全部管道
 	close(conn.ExitBuffChan)
+	close(conn.msgBuffChan)
+	close(conn.msgChan)
 }
 
 // GetTCPConnection 获取原始的socket TCPConn
@@ -159,9 +173,37 @@ func (conn *Connection) StartWriter() {
 				fmt.Println("Send Data error:, ", err, " Conn Writer exit")
 				return
 			}
+		case data, ok := <-conn.msgBuffChan:
+			if ok {
+				//有数据要写给客户端
+				if _, err := conn.Conn.Write(data); err != nil {
+					fmt.Println("Send Buff Data error:, ", err, " Conn Writer exit")
+					return
+				}
+			} else {
+				break
+				fmt.Println("msgBuffChan is Closed")
+			}
 		case <-conn.ExitBuffChan:
 			//conn已经关闭
 			return
 		}
 	}
+}
+func (conn *Connection) SendBuffMsg(msgId uint32, data []byte) error {
+	if conn.isClosed == true {
+		return errors.New("connection closed when send buff msg")
+	}
+	//将data封包，并且发送
+	dp := NewDataPack()
+	msg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("Pack error msg id = ", msgId)
+		return errors.New("Pack error msg ")
+	}
+
+	//写回客户端
+	conn.msgBuffChan <- msg
+
+	return nil
 }

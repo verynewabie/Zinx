@@ -14,6 +14,12 @@ type Server struct {
 	IP         string
 	Port       int
 	msgHandler ziface.IMsgHandler
+	//当前Server的链接管理器
+	ConnMgr ziface.IConnectionManager
+	//该Server的连接创建时Hook函数
+	OnConnStart func(conn ziface.IConnection) //可以看做类内函数，该函数不和该结构体绑定
+	//该Server的连接断开时的Hook函数
+	OnConnStop func(conn ziface.IConnection)
 }
 
 func (s *Server) AddRouter(msgId uint32, router ziface.IRouter) {
@@ -55,10 +61,13 @@ func (s *Server) Start() {
 				continue
 			}
 
-			//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
-
+			//3.2 如果超过最大连接，那么则关闭此新的连接
+			if s.ConnMgr.Len() >= utils.GlobalObject.MaxConn {
+				conn.Close()
+				continue
+			}
 			//3.3 处理该新连接请求的业务方法
-			dealConn := NewConnection(conn, connectionID, s.msgHandler)
+			dealConn := NewConnection(s, conn, connectionID, s.msgHandler)
 			connectionID++
 
 			//3.4 启动当前链接的处理业务
@@ -68,7 +77,7 @@ func (s *Server) Start() {
 }
 func (s *Server) Stop() {
 	fmt.Println("[STOP] Zinx server , name ", s.Name)
-	// TODO 释放或回收资源、连接等
+	s.ConnMgr.ClearConnection()
 }
 func (s *Server) Serve() {
 	s.Start()
@@ -85,6 +94,38 @@ func NewServer() ziface.IServer {
 		IP:         utils.GlobalObject.Host,    //从全局参数获取
 		Port:       utils.GlobalObject.TcpPort, //从全局参数获取
 		msgHandler: NewMsgHandler(),
+		ConnMgr:    NewConnectionManager(), //创建ConnManager
 	}
 	return s
+}
+
+// GetConnMgr 得到链接管理
+func (s *Server) GetConnMgr() ziface.IConnectionManager {
+	return s.ConnMgr
+}
+
+// SetOnConnStart 设置该Server的连接创建时Hook函数
+func (s *Server) SetOnConnStart(hookFunc func(ziface.IConnection)) {
+	s.OnConnStart = hookFunc
+}
+
+// SetOnConnStop 设置该Server的连接断开时的Hook函数
+func (s *Server) SetOnConnStop(hookFunc func(ziface.IConnection)) {
+	s.OnConnStop = hookFunc
+}
+
+// CallOnConnStart 调用连接OnConnStart Hook函数
+func (s *Server) CallOnConnStart(conn ziface.IConnection) {
+	if s.OnConnStart != nil {
+		fmt.Println("---> CallOnConnStart....")
+		s.OnConnStart(conn)
+	}
+}
+
+// CallOnConnStop 调用连接OnConnStop Hook函数
+func (s *Server) CallOnConnStop(conn ziface.IConnection) {
+	if s.OnConnStop != nil {
+		fmt.Println("---> CallOnConnStop....")
+		s.OnConnStop(conn)
+	}
 }
