@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 )
 
 type Connection struct {
@@ -23,6 +24,10 @@ type Connection struct {
 	msgChan chan []byte
 	//有缓冲管道，用于读、写两个goroutine之间的消息通信
 	msgBuffChan chan []byte
+	//链接属性
+	property map[string]interface{}
+	//保护链接属性修改的锁
+	propertyLock sync.RWMutex
 }
 
 func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
@@ -35,6 +40,7 @@ func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgH
 		ExitBuffChan: make(chan bool, 1),
 		msgChan:      make(chan []byte),
 		msgBuffChan:  make(chan []byte, utils.GlobalObject.MaxMsgChanLen),
+		property:     make(map[string]interface{}), //对链接属性map初始化
 	}
 	connection.TcpServer.GetConnMgr().Add(connection)
 	return connection
@@ -206,4 +212,32 @@ func (conn *Connection) SendBuffMsg(msgId uint32, data []byte) error {
 	conn.msgBuffChan <- msg
 
 	return nil
+}
+
+// SetProperty 设置链接属性
+func (conn *Connection) SetProperty(key string, value interface{}) {
+	conn.propertyLock.Lock()
+	defer conn.propertyLock.Unlock()
+
+	conn.property[key] = value
+}
+
+// GetProperty 获取链接属性
+func (conn *Connection) GetProperty(key string) (interface{}, error) {
+	conn.propertyLock.RLock()
+	defer conn.propertyLock.RUnlock()
+
+	if value, ok := conn.property[key]; ok {
+		return value, nil
+	} else {
+		return nil, errors.New("no property found")
+	}
+}
+
+// RemoveProperty 移除链接属性
+func (conn *Connection) RemoveProperty(key string) {
+	conn.propertyLock.Lock()
+	defer conn.propertyLock.Unlock()
+
+	delete(conn.property, key)
 }
