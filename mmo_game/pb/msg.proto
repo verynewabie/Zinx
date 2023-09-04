@@ -1,0 +1,45 @@
+syntax="proto3";                //Proto协议
+package pb;                     //当前文件包名,其他proto文件导入后使用
+option go_package = "./;pb";    //生成的位置;生成后包名
+option csharp_namespace="Pb";   //给C#提供的选项
+//同步客户端玩家ID
+message SyncPid{
+    int32 Pid=1;
+}
+
+//玩家位置
+message Position{
+    float X=1; //平面x坐标
+    float Y=2; //高度
+    float Z=3; //平面y坐标 (注意不是Y)
+    float V=4; //旋转0-360度
+}
+
+//玩家广播数据
+message BroadCast{
+    int32 Pid=1; // 广播消息发起者
+    int32 Tp=2; //广播消息类型 1~世界聊天 2~玩家出生点位置 3~动作 4~移动之后坐标信息更新
+    oneof Data {//只取其中一个,BroadCast_P就代表取了第二个
+        string Content=3; //聊天的信息
+        Position P=4; //广播用户的位置
+        int32 ActionData=5;
+    }
+}
+
+//玩家聊天数据
+message Talk{
+    string Content=1;    //聊天内容
+}
+
+//玩家信息
+message Player{
+    int32 Pid=1;
+    Position P=2;
+}
+
+//同步玩家显示数据
+message SyncPlayers{
+    repeated Player ps=1;
+}
+
+
