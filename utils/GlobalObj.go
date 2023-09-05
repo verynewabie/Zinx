@@ -50,7 +50,7 @@ func init() { // 导入包的时候触发
 	//初始化GlobalObject变量，设置一些默认值
 	GlobalObject = &GlobalObj{
 		Name:             "ZinxServerApp",
-		Version:          "V0.8",
+		Version:          "V1.0",
 		TcpPort:          8999,
 		Host:             "0.0.0.0",
 		MaxConn:          12000,
